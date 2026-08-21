@@ -1,0 +1,12 @@
+{
+  "name": "陳家糖燻滷味",
+  "short_name": "陳家滷味",
+  "description": "陳家糖燻滷味內部訂單管理系統",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f7f2ec",
+  "theme_color": "#7a2f1f",
+  "icons": [
+    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

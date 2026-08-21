@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#7a2f1f" />
+  <meta name="description" content="陳家糖燻滷味內部訂單管理系統" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <title>陳家糖燻滷味</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>陳家糖燻滷味</h1>
+      <p>內部訂單管理</p>
+    </div>
+    <button id="installBtn" class="ghost hidden" type="button">安裝 App</button>
+  </header>
+
+  <main>
+    <nav class="tabs" aria-label="主要功能">
+      <button class="tab active" data-view="newOrder">新增訂單</button>
+      <button class="tab" data-view="orders">訂單管理</button>
+      <button class="tab" data-view="stats">日期統計</button>
+      <button class="tab" data-view="items">品項管理</button>
+      <button class="tab" data-view="backup">備份</button>
+    </nav>
+
+    <section id="newOrder" class="view active">
+      <div class="card">
+        <div class="section-title-row">
+          <h2 id="orderFormTitle">新增訂單</h2>
+          <button id="cancelEditBtn" class="ghost hidden" type="button">取消編輯</button>
+        </div>
+        <form id="orderForm">
+          <input id="editingOrderId" type="hidden" />
+          <label>訂購人姓名
+            <input id="customerName" autocomplete="name" required placeholder="例如：王小姐" />
+          </label>
+          <label>訂購人電話
+            <input id="customerPhone" inputmode="tel" autocomplete="tel" placeholder="例如：0912345678" />
+          </label>
+          <label>取貨日期
+            <input id="pickupDate" type="date" required />
+          </label>
+
+          <div class="section-title-row items-heading">
+            <h3>訂購品項</h3>
+            <button id="clearQtyBtn" class="ghost small" type="button">數量歸零</button>
+          </div>
+          <div id="itemQuantityList" class="item-qty-list"></div>
+
+          <label>備註
+            <textarea id="orderNote" rows="3" placeholder="例如：分兩袋、不要辣"></textarea>
+          </label>
+          <button class="primary full" type="submit">儲存訂單</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="orders" class="view">
+      <div class="card">
+        <h2>訂單管理</h2>
+        <div class="filters">
+          <label>取貨日期
+            <input id="orderFilterDate" type="date" />
+          </label>
+          <label>搜尋姓名或電話
+            <input id="orderSearch" type="search" placeholder="輸入關鍵字" />
+          </label>
+        </div>
+        <div class="actions-row">
+          <button id="todayOrdersBtn" class="ghost" type="button">今天</button>
+          <button id="clearOrderFilterBtn" class="ghost" type="button">清除篩選</button>
+        </div>
+        <div id="orderList" class="order-list"></div>
+      </div>
+    </section>
+
+    <section id="stats" class="view">
+      <div class="card">
+        <h2>依取貨日期統計</h2>
+        <div class="filters stats-filter">
+          <label>取貨日期
+            <input id="statsDate" type="date" />
+          </label>
+          <button id="exportExcelBtn" class="primary" type="button">匯出 Excel</button>
+        </div>
+        <div id="statsSummary" class="summary-grid"></div>
+
+        <h3>全部品項總計</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>品項</th><th class="num">總數量</th></tr></thead>
+            <tbody id="itemTotalsBody"></tbody>
+          </table>
+        </div>
+
+        <h3>每位訂購人明細</h3>
+        <div id="customerStatsList" class="customer-stats-list"></div>
+      </div>
+    </section>
+
+    <section id="items" class="view">
+      <div class="card">
+        <h2>品項管理</h2>
+        <form id="addItemForm" class="inline-form">
+          <input id="newItemName" required placeholder="新增品項名稱" />
+          <button class="primary" type="submit">新增</button>
+        </form>
+        <p class="hint">停用品項不會出現在新訂單，但舊訂單資料會保留。若已有歷史訂單，建議使用「停用」而不是刪除。</p>
+        <div id="itemManageList" class="manage-list"></div>
+      </div>
+    </section>
+
+    <section id="backup" class="view">
+      <div class="card">
+        <h2>資料備份與還原</h2>
+        <p>資料目前儲存在這台裝置的瀏覽器中。建議定期匯出備份檔。</p>
+        <div class="backup-actions">
+          <button id="exportBackupBtn" class="primary" type="button">匯出完整備份</button>
+          <label class="file-button ghost">匯入備份
+            <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
+          </label>
+        </div>
+        <div id="backupInfo" class="backup-info"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="confirmDialog">
+    <form method="dialog">
+      <h3 id="confirmTitle">確認</h3>
+      <p id="confirmMessage"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">取消</button>
+        <button value="ok" class="danger">確定</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
