@@ -15,7 +15,7 @@
 </head>
 <body>
 <header class="app-header">
-  <div><h1>陳家糖燻滷味</h1><p>訂單・進貨・庫存管理 V2</p></div>
+  <div><h1>陳家糖燻滷味</h1><p>訂單・進貨・庫存管理 V2.1</p></div>
   <button id="installBtn" class="ghost small hidden" type="button">安裝 App</button>
 </header>
 <main>
@@ -68,7 +68,7 @@
     <h3>進貨紀錄</h3><div id="receiptList" class="order-list"></div>
   </div></section>
 
-  <section id="stock" class="view"><div class="card"><h2>目前庫存</h2><p class="hint">庫存 = 全部進貨 − 已建立訂單的扣庫數量。負數代表訂單需求已超過庫存。</p><div id="stockWarning"></div><div class="table-wrap"><table><thead><tr><th>品項</th><th class="num">目前庫存</th></tr></thead><tbody id="stockBody"></tbody></table></div></div></section>
+  <section id="stock" class="view"><div class="card"><h2>目前庫存</h2><p class="hint">庫存只計算「庫存計算起始日」之後的進貨與訂單；更早的歷史訂單不會回頭扣現在庫存。</p><div class="inline-form" style="margin-bottom:12px"><label style="min-width:180px">庫存計算起始日<input id="stockStartDate" type="date"></label><button id="saveStockStartBtn" class="primary" type="button">儲存起始日</button></div><div id="stockWarning"></div><div class="table-wrap"><table><thead><tr><th>品項</th><th class="num">目前庫存</th></tr></thead><tbody id="stockBody"></tbody></table></div></div></section>
 
   <section id="movements" class="view"><div class="card"><h2>庫存異動紀錄</h2><div class="filters"><label>品項<select id="movementItemFilter"></select></label><label>關鍵字<input id="movementSearch" type="search" placeholder="姓名、備註"></label></div><div id="movementList" class="movement-list"></div></div></section>
 
