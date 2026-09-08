@@ -1,331 +1,118 @@
 'use strict';
 
-const DEFAULT_ITEMS = [
-  '糖燻跑山雞','鹽水跑山雞','糖燻五花肉','鹽水五花肉','棒棒腿','松阪肉','菊花肉','豬肋骨','豬腳',
-  '糖燻山雞L腿','鹽水山雞L腿','醉雞','醉蝦','蹄膀','虎掌','筍乾','雞翅','鴨翅','杏鮑菇','滷蛋','軟絲','豬肚','豬心','黑輪',
-  '涼拌雲耳','醬燒豆丁','醬燒海帶節'
-];
+const DEFAULT_ORDER_ITEMS=[
+'糖燻跑山雞','鹽水跑山雞','糖燻五花肉','鹽水五花肉','棒棒腿','松阪肉','菊花肉','豬肋骨','豬腳','糖燻山雞L腿','鹽水山雞L腿','醉雞','醉蝦','蹄膀','虎掌','筍乾','雞翅','鴨翅','杏鮑菇','滷蛋','軟絲','豬肚','豬心','黑輪','涼拌雲耳','醬燒豆丁','醬燒海帶節'];
+const DEFAULT_STOCK_ITEMS=['跑山雞','五花肉','棒棒腿','松阪肉','菊花肉','豬肋骨','豬腳','山雞L腿','蹄膀','虎掌','筍乾','雞翅','鴨翅','杏鮑菇','雞蛋','軟絲','豬肚','豬心','黑輪','雲耳','豆乾丁','海帶節','白蝦'];
+const DEFAULT_MAP={
+'糖燻跑山雞':'跑山雞','鹽水跑山雞':'跑山雞','糖燻五花肉':'五花肉','鹽水五花肉':'五花肉','棒棒腿':'棒棒腿','松阪肉':'松阪肉','菊花肉':'菊花肉','豬肋骨':'豬肋骨','豬腳':'豬腳','糖燻山雞L腿':'山雞L腿','鹽水山雞L腿':'山雞L腿','醉蝦':'白蝦','蹄膀':'蹄膀','虎掌':'虎掌','筍乾':'筍乾','雞翅':'雞翅','鴨翅':'鴨翅','杏鮑菇':'杏鮑菇','滷蛋':'雞蛋','軟絲':'軟絲','豬肚':'豬肚','豬心':'豬心','黑輪':'黑輪','涼拌雲耳':'雲耳','醬燒豆丁':'豆乾丁','醬燒海帶節':'海帶節'};
 
-const DB_NAME = 'chenjia-luwei-db';
-const DB_VERSION = 1;
-let db;
-let deferredInstallPrompt = null;
+const DB_NAME='chenjia-luwei-db';
+const DB_VERSION=2;
+let db,deferredInstallPrompt=null;
+const $=id=>document.getElementById(id);
+const todayISO=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const fmtDate=iso=>iso?iso.replace(/-/g,'/'):'';
+const fmtQty=n=>Number.isInteger(Number(n))?String(Number(n)):String(Number(n).toFixed(2)).replace(/\.00$/,'');
 
-const $ = id => document.getElementById(id);
-const todayISO = () => new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-const fmtDate = iso => iso ? iso.replace(/-/g,'/') : '';
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),2400)}
+function reqP(req){return new Promise((res,rej)=>{req.onsuccess=()=>res(req.result);req.onerror=()=>rej(req.error)})}
+function store(name,mode='readonly'){return db.transaction(name,mode).objectStore(name)}
+const getAll=name=>reqP(store(name).getAll());
+const getOne=(name,id)=>reqP(store(name).get(id));
+const add=(name,v)=>reqP(store(name,'readwrite').add(v));
+const put=(name,v)=>reqP(store(name,'readwrite').put(v));
+const del=(name,id)=>reqP(store(name,'readwrite').delete(id));
 
-function toast(message) {
-  const el = $('toast');
-  el.textContent = message;
-  el.classList.add('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove('show'), 2200);
+function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,DB_VERSION);req.onupgradeneeded=e=>{const d=req.result;const old=e.oldVersion;
+  if(!d.objectStoreNames.contains('items')){const s=d.createObjectStore('items',{keyPath:'id',autoIncrement:true});s.createIndex('sort','sort')}
+  if(!d.objectStoreNames.contains('orders')){const s=d.createObjectStore('orders',{keyPath:'id',autoIncrement:true});s.createIndex('pickupDate','pickupDate')}
+  if(old<2){
+    if(!d.objectStoreNames.contains('stockItems')){const s=d.createObjectStore('stockItems',{keyPath:'id',autoIncrement:true});s.createIndex('sort','sort')}
+    if(!d.objectStoreNames.contains('receipts')){const s=d.createObjectStore('receipts',{keyPath:'id',autoIncrement:true});s.createIndex('date','date')}
+    if(!d.objectStoreNames.contains('mappings')) d.createObjectStore('mappings',{keyPath:'orderItemId'});
+  }};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+
+async function ensureDefaults(){
+  if(!(await getAll('items')).length){const tx=db.transaction('items','readwrite'),s=tx.objectStore('items');DEFAULT_ORDER_ITEMS.forEach((name,i)=>s.add({name,active:true,sort:i+1,createdAt:new Date().toISOString()}));await txDone(tx)}
+  if(!(await getAll('stockItems')).length){const tx=db.transaction('stockItems','readwrite'),s=tx.objectStore('stockItems');DEFAULT_STOCK_ITEMS.forEach((name,i)=>s.add({name,active:true,sort:i+1,createdAt:new Date().toISOString()}));await txDone(tx)}
+  const mappings=await getAll('mappings');
+  if(!mappings.length){const orderItems=await allItems(),stockItems=await allStockItems();const stockByName=Object.fromEntries(stockItems.map(i=>[i.name,i]));const tx=db.transaction('mappings','readwrite'),s=tx.objectStore('mappings');for(const oi of orderItems){const target=DEFAULT_MAP[oi.name];s.put({orderItemId:oi.id,stockItemId:target&&stockByName[target]?stockByName[target].id:null,factor:1})}await txDone(tx)}
 }
+function txDone(tx){return new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
+async function allItems(){return (await getAll('items')).sort((a,b)=>a.sort-b.sort||a.id-b.id)}
+async function activeItems(){return (await allItems()).filter(i=>i.active)}
+async function allStockItems(){return (await getAll('stockItems')).sort((a,b)=>a.sort-b.sort||a.id-b.id)}
+async function activeStockItems(){return (await allStockItems()).filter(i=>i.active)}
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const d = req.result;
-      if (!d.objectStoreNames.contains('items')) {
-        const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
-        s.createIndex('sort', 'sort');
-      }
-      if (!d.objectStoreNames.contains('orders')) {
-        const s = d.createObjectStore('orders', { keyPath: 'id', autoIncrement: true });
-        s.createIndex('pickupDate', 'pickupDate');
-        s.createIndex('customerName', 'customerName');
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+function confirmAction(title,message){return new Promise(resolve=>{const d=$('confirmDialog');$('confirmTitle').textContent=title;$('confirmMessage').textContent=message;d.returnValue='';d.addEventListener('close',()=>resolve(d.returnValue==='ok'),{once:true});d.showModal()})}
 
-function store(name, mode='readonly') { return db.transaction(name, mode).objectStore(name); }
-function reqP(req) { return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);}); }
-const getAll = name => reqP(store(name).getAll());
-const put = (name, value) => reqP(store(name,'readwrite').put(value));
-const add = (name, value) => reqP(store(name,'readwrite').add(value));
-const del = (name, key) => reqP(store(name,'readwrite').delete(key));
+async function renderQtyList(selected={}){const items=await activeItems();$('itemQuantityList').innerHTML=items.length?items.map(item=>`<div class="qty-row" data-item-id="${item.id}"><div class="qty-name">${esc(item.name)}</div><div class="qty-control"><button type="button" class="qty-minus">−</button><input class="qty-input" type="number" min="0" step="1" inputmode="numeric" value="${Number(selected[item.id]||0)}"><button type="button" class="qty-plus">＋</button></div></div>`).join(''):'<div class="empty">目前沒有啟用品項</div>'}
+function qtyMapFromForm(){const out={};document.querySelectorAll('.qty-row').forEach(r=>{const q=Math.max(0,parseInt(r.querySelector('.qty-input').value||'0',10)||0);if(q>0)out[r.dataset.itemId]=q});return out}
+async function buildStockSnapshot(quantities){const mappings=await getAll('mappings');const map=Object.fromEntries(mappings.map(m=>[String(m.orderItemId),m]));const snap=[];for(const [orderItemId,qty] of Object.entries(quantities)){const m=map[orderItemId];if(m&&m.stockItemId&&Number(m.factor)>0)snap.push({orderItemId:Number(orderItemId),stockItemId:Number(m.stockItemId),factor:Number(m.factor),qty:Number(qty),used:Number(qty)*Number(m.factor)})}return snap}
+function aggregateSnapshot(snapshot){const out={};for(const s of snapshot||[])out[s.stockItemId]=(out[s.stockItemId]||0)+Number(s.used||0);return out}
+async function calculateStock(excludeOrderId=0){const stocks=await allStockItems(),receipts=await getAll('receipts'),orders=await getAll('orders');const qty=Object.fromEntries(stocks.map(s=>[s.id,0]));for(const r of receipts)qty[r.stockItemId]=(qty[r.stockItemId]||0)+Number(r.qty||0);for(const o of orders){if(excludeOrderId&&o.id===excludeOrderId)continue;for(const [sid,used] of Object.entries(aggregateSnapshot(o.stockSnapshot||[])))qty[sid]=(qty[sid]||0)-Number(used)}return {stocks,qty}}
+async function stockWarningsFor(snapshot,excludeOrderId=0){const {stocks,qty}=await calculateStock(excludeOrderId);const names=Object.fromEntries(stocks.map(s=>[s.id,s.name]));const need=aggregateSnapshot(snapshot);const bad=[];for(const [sid,n] of Object.entries(need)){const after=Number(qty[sid]||0)-Number(n);if(after<0)bad.push({name:names[sid]||'已刪除庫存品項',current:Number(qty[sid]||0),need:Number(n),after})}return bad}
 
-async function ensureDefaults() {
-  const items = await getAll('items');
-  if (items.length) return;
-  const tx = db.transaction('items','readwrite');
-  const s = tx.objectStore('items');
-  DEFAULT_ITEMS.forEach((name,i)=>s.add({name,active:true,sort:i+1,createdAt:new Date().toISOString()}));
-  await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
-}
+async function saveOrder(e){e.preventDefault();const customerName=$('customerName').value.trim(),pickupDate=$('pickupDate').value,quantities=qtyMapFromForm();if(!customerName||!pickupDate)return toast('請填寫姓名與取貨日期');if(!Object.keys(quantities).length)return toast('請至少填寫一個品項數量');const id=Number($('editingOrderId').value||0),snapshot=await buildStockSnapshot(quantities),bad=await stockWarningsFor(snapshot,id);if(bad.length){const msg='以下品項將變成負庫存：\n\n'+bad.map(x=>`${x.name}：目前 ${fmtQty(x.current)}，本單扣 ${fmtQty(x.need)}，結果 ${fmtQty(x.after)}`).join('\n')+'\n\n仍要儲存訂單嗎？';if(!(await confirmAction('⚠️ 庫存不足',msg)))return}
+  const now=new Date().toISOString(),base={customerName,customerPhone:$('customerPhone').value.trim(),pickupDate,note:$('orderNote').value.trim(),quantities,stockSnapshot:snapshot,updatedAt:now};if(id){const old=await getOne('orders',id);await put('orders',{...old,...base,id});toast('訂單已更新')}else{await add('orders',{...base,createdAt:now});toast('訂單已儲存')}await resetOrderForm();await refreshAll()}
+async function resetOrderForm(){$('orderForm').reset();$('editingOrderId').value='';$('pickupDate').value=todayISO();$('orderFormTitle').textContent='新增訂單';$('cancelEditBtn').classList.add('hidden');await renderQtyList()}
+async function editOrder(id){const o=await getOne('orders',id);if(!o)return;switchView('newOrder');$('editingOrderId').value=o.id;$('customerName').value=o.customerName;$('customerPhone').value=o.customerPhone||'';$('pickupDate').value=o.pickupDate;$('orderNote').value=o.note||'';$('orderFormTitle').textContent='編輯訂單';$('cancelEditBtn').classList.remove('hidden');await renderQtyList(o.quantities||{});window.scrollTo({top:0,behavior:'smooth'})}
+async function deleteOrder(id){const o=await getOne('orders',id);if(!o)return;if(!(await confirmAction('刪除訂單',`確定刪除「${o.customerName}」${fmtDate(o.pickupDate)} 的訂單？庫存會自動回補。`)))return;await del('orders',id);toast('訂單已刪除，庫存已重新計算');await refreshAll()}
 
-async function activeItems() {
-  return (await getAll('items')).filter(i=>i.active).sort((a,b)=>a.sort-b.sort || a.id-b.id);
-}
-async function allItems() {
-  return (await getAll('items')).sort((a,b)=>a.sort-b.sort || a.id-b.id);
-}
+async function renderOrders(){const items=await allItems(),names=Object.fromEntries(items.map(i=>[i.id,i.name]));const date=$('orderFilterDate').value,q=$('orderSearch').value.trim().toLowerCase();let orders=await getAll('orders');orders=orders.filter(o=>(!date||o.pickupDate===date)&&(!q||(o.customerName||'').toLowerCase().includes(q)||(o.customerPhone||'').toLowerCase().includes(q))).sort((a,b)=>b.pickupDate.localeCompare(a.pickupDate)||b.id-a.id);$('orderList').innerHTML=orders.length?orders.map(o=>`<article class="order-card"><div class="order-card-head"><div><h3>${esc(o.customerName)}</h3><div class="meta">${fmtDate(o.pickupDate)}${o.customerPhone?' ・ '+esc(o.customerPhone):''}</div></div></div><div class="chips">${Object.entries(o.quantities||{}).filter(([,x])=>x>0).map(([id,x])=>`<span class="chip">${esc(names[id]||'已刪除品項')} × ${x}</span>`).join('')}</div>${o.note?`<div class="note">備註：${esc(o.note)}</div>`:''}<div class="card-actions"><button class="ghost edit-order" data-id="${o.id}">修改</button><button class="danger delete-order" data-id="${o.id}">刪除</button></div></article>`).join(''):'<div class="empty">沒有符合條件的訂單</div>'}
+async function getStats(date){const items=await allItems(),orders=(await getAll('orders')).filter(o=>o.pickupDate===date).sort((a,b)=>a.id-b.id),totals={};let totalQty=0;for(const o of orders)for(const [id,q] of Object.entries(o.quantities||{})){totals[id]=(totals[id]||0)+Number(q);totalQty+=Number(q)}return{items,orders,totals,totalQty}}
+async function renderStats(){const date=$('statsDate').value||todayISO(),{items,orders,totals,totalQty}=await getStats(date),names=Object.fromEntries(items.map(i=>[i.id,i.name]));$('statsSummary').innerHTML=`<div class="summary-box">訂單筆數<strong>${orders.length}</strong></div><div class="summary-box">品項總件數<strong>${totalQty}</strong></div>`;$('itemTotalsBody').innerHTML=items.filter(i=>totals[i.id]>0).map(i=>`<tr><td>${esc(i.name)}</td><td class="num"><strong>${totals[i.id]}</strong></td></tr>`).join('')||'<tr><td colspan="2" class="empty">此日期尚無訂單</td></tr>';$('customerStatsList').innerHTML=orders.length?orders.map(o=>`<div class="customer-stat"><h4>${esc(o.customerName)}</h4><div class="meta">${esc(o.customerPhone||'未填電話')}</div><div class="chips">${Object.entries(o.quantities||{}).filter(([,q])=>q>0).map(([id,q])=>`<span class="chip">${esc(names[id]||'已刪除品項')} × ${q}</span>`).join('')}</div>${o.note?`<div class="note">備註：${esc(o.note)}</div>`:''}</div>`).join(''):'<div class="empty">此日期尚無訂單</div>'}
 
-async function renderQtyList(selected={}) {
-  const items = await activeItems();
-  $('itemQuantityList').innerHTML = items.length ? items.map(item => `
-    <div class="qty-row" data-item-id="${item.id}">
-      <div class="qty-name">${esc(item.name)}</div>
-      <div class="qty-control">
-        <button type="button" class="qty-minus" aria-label="${esc(item.name)}減少">−</button>
-        <input class="qty-input" type="number" min="0" step="1" inputmode="numeric" value="${Number(selected[item.id] || 0)}" aria-label="${esc(item.name)}數量" />
-        <button type="button" class="qty-plus" aria-label="${esc(item.name)}增加">＋</button>
-      </div>
-    </div>`).join('') : '<div class="empty">目前沒有啟用品項</div>';
-}
+async function fillStockSelects(){const stocks=await activeStockItems(),opts='<option value="">請選擇</option>'+stocks.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');const currentReceipt=$('receiptStockItem')?.value;if($('receiptStockItem')){$('receiptStockItem').innerHTML=opts;if(currentReceipt)$('receiptStockItem').value=currentReceipt}const mf=$('movementItemFilter')?.value;if($('movementItemFilter')){$('movementItemFilter').innerHTML='<option value="">全部品項</option>'+stocks.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');if(mf)$('movementItemFilter').value=mf}}
+async function saveReceipt(e){e.preventDefault();const id=Number($('editingReceiptId').value||0),date=$('receiptDate').value,stockItemId=Number($('receiptStockItem').value),qty=Number($('receiptQty').value),note=$('receiptNote').value.trim();if(!date||!stockItemId||!(qty>0))return toast('請完整填寫進貨資料');const now=new Date().toISOString(),base={date,stockItemId,qty,note,updatedAt:now};if(id){const old=await getOne('receipts',id);await put('receipts',{...old,...base,id});toast('進貨紀錄已更新')}else{await add('receipts',{...base,createdAt:now});toast('進貨已新增')}resetReceiptForm();await refreshAll()}
+function resetReceiptForm(){$('receiptForm').reset();$('editingReceiptId').value='';$('receiptDate').value=todayISO();$('receiptFormTitle').textContent='新增進貨';$('cancelReceiptEditBtn').classList.add('hidden')}
+async function editReceipt(id){const r=await getOne('receipts',id);if(!r)return;$('editingReceiptId').value=r.id;$('receiptDate').value=r.date;$('receiptStockItem').value=r.stockItemId;$('receiptQty').value=r.qty;$('receiptNote').value=r.note||'';$('receiptFormTitle').textContent='編輯進貨';$('cancelReceiptEditBtn').classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'})}
+async function deleteReceipt(id){const r=await getOne('receipts',id);if(!r)return;if(!(await confirmAction('刪除進貨',`確定刪除此筆進貨 ${fmtQty(r.qty)}？庫存會自動重新計算。`)))return;await del('receipts',id);toast('進貨已刪除');await refreshAll()}
+async function renderReceipts(){const stocks=await allStockItems(),names=Object.fromEntries(stocks.map(s=>[s.id,s.name]));const rs=(await getAll('receipts')).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);$('receiptList').innerHTML=rs.length?rs.map(r=>`<article class="order-card"><div class="order-card-head"><div><h3>${esc(names[r.stockItemId]||'已刪除庫存品項')} ＋${fmtQty(r.qty)}</h3><div class="meta">${fmtDate(r.date)}</div></div></div>${r.note?`<div class="note">備註：${esc(r.note)}</div>`:''}<div class="card-actions"><button class="ghost edit-receipt" data-id="${r.id}">修改</button><button class="danger delete-receipt" data-id="${r.id}">刪除</button></div></article>`).join(''):'<div class="empty">尚無進貨紀錄</div>'}
 
-function qtyMapFromForm() {
-  const out = {};
-  document.querySelectorAll('.qty-row').forEach(row => {
-    const qty = Math.max(0, parseInt(row.querySelector('.qty-input').value || '0',10) || 0);
-    if (qty > 0) out[row.dataset.itemId] = qty;
-  });
-  return out;
-}
+async function renderStock(){const {stocks,qty}=await calculateStock();const active=stocks.filter(s=>s.active),neg=active.filter(s=>Number(qty[s.id]||0)<0);$('stockWarning').innerHTML=neg.length?`<div class="warning-box"><strong>⚠️ 有 ${neg.length} 個品項庫存不足</strong><div>${neg.map(s=>`${esc(s.name)} ${fmtQty(qty[s.id])}`).join('、')}</div></div>`:'<div class="ok-box">目前沒有負庫存品項。</div>';$('stockBody').innerHTML=active.map(s=>{const n=Number(qty[s.id]||0);return`<tr class="${n<0?'negative':''}"><td>${esc(s.name)}${n<0?' ⚠️':''}</td><td class="num">${fmtQty(n)}</td></tr>`}).join('')||'<tr><td colspan="2" class="empty">尚無庫存品項</td></tr>'}
 
-async function saveOrder(e) {
-  e.preventDefault();
-  const customerName = $('customerName').value.trim();
-  const pickupDate = $('pickupDate').value;
-  const quantities = qtyMapFromForm();
-  if (!customerName || !pickupDate) return toast('請填寫姓名與取貨日期');
-  if (!Object.keys(quantities).length) return toast('請至少填寫一個品項數量');
-  const id = Number($('editingOrderId').value || 0);
-  const now = new Date().toISOString();
-  const base = {
-    customerName,
-    customerPhone: $('customerPhone').value.trim(),
-    pickupDate,
-    note: $('orderNote').value.trim(),
-    quantities,
-    updatedAt: now
-  };
-  if (id) {
-    const old = await reqP(store('orders').get(id));
-    await put('orders',{...old,...base,id});
-    toast('訂單已更新');
-  } else {
-    await add('orders',{...base,createdAt:now});
-    toast('訂單已儲存');
-  }
-  resetOrderForm();
-  await refreshAll();
-}
+async function movementRows(){const stocks=await allStockItems(),stockNames=Object.fromEntries(stocks.map(s=>[s.id,s.name])),orderItems=await allItems(),orderNames=Object.fromEntries(orderItems.map(i=>[i.id,i.name])),receipts=await getAll('receipts'),orders=await getAll('orders'),rows=[];
+  for(const r of receipts)rows.push({date:r.date,ts:r.updatedAt||r.createdAt||r.date,stockItemId:r.stockItemId,type:'進貨',delta:Number(r.qty),detail:r.note||'',sourceId:r.id});
+  for(const o of orders){const agg=aggregateSnapshot(o.stockSnapshot||[]);for(const [sid,used] of Object.entries(agg)){const related=(o.stockSnapshot||[]).filter(x=>String(x.stockItemId)===String(sid)).map(x=>orderNames[x.orderItemId]).filter(Boolean).join('、');rows.push({date:(o.updatedAt||o.createdAt||'').slice(0,10)||o.pickupDate,ts:o.updatedAt||o.createdAt||o.pickupDate,stockItemId:Number(sid),type:'訂單',delta:-Number(used),detail:`${o.customerName}｜取貨 ${fmtDate(o.pickupDate)}${related?'｜'+related:''}`,sourceId:o.id})}}
+  rows.sort((a,b)=>a.ts.localeCompare(b.ts)||a.type.localeCompare(b.type));const bal={};for(const r of rows){bal[r.stockItemId]=(bal[r.stockItemId]||0)+r.delta;r.balance=bal[r.stockItemId];r.stockName=stockNames[r.stockItemId]||'已刪除庫存品項'}return rows.sort((a,b)=>b.ts.localeCompare(a.ts))}
+async function renderMovements(){const sid=Number($('movementItemFilter').value||0),q=$('movementSearch').value.trim().toLowerCase();let rows=await movementRows();rows=rows.filter(r=>(!sid||r.stockItemId===sid)&&(!q||r.stockName.toLowerCase().includes(q)||r.detail.toLowerCase().includes(q)));$('movementList').innerHTML=rows.length?rows.map(r=>`<div class="movement-card"><div class="movement-head"><div><strong>${esc(r.stockName)}</strong><div class="meta">${fmtDate(r.date)} ・ ${r.type}</div></div><div class="${r.delta>=0?'movement-plus':'movement-minus'}">${r.delta>=0?'+':''}${fmtQty(r.delta)}</div></div><div class="meta">${esc(r.detail||'')}</div><div class="balance">此筆後結餘：${fmtQty(r.balance)}</div></div>`).join(''):'<div class="empty">沒有符合條件的異動紀錄</div>'}
 
-async function resetOrderForm() {
-  $('orderForm').reset();
-  $('editingOrderId').value='';
-  $('pickupDate').value = todayISO();
-  $('orderFormTitle').textContent='新增訂單';
-  $('cancelEditBtn').classList.add('hidden');
-  await renderQtyList();
-}
+async function renderItemManagement(){const items=await allItems();$('itemManageList').innerHTML=items.map((i,idx)=>manageRow(i,idx,items.length,'item')).join('')}
+async function renderStockItemManagement(){const items=await allStockItems();$('stockItemManageList').innerHTML=items.map((i,idx)=>manageRow(i,idx,items.length,'stock')).join('')}
+function manageRow(i,idx,len,type){return`<div class="manage-row" data-id="${i.id}" data-type="${type}"><div class="manage-order"><button class="ghost move-up" ${idx===0?'disabled':''}>▲</button><button class="ghost move-down" ${idx===len-1?'disabled':''}>▼</button></div><div class="manage-name ${i.active?'':'disabled'}">${esc(i.name)}</div><div class="manage-actions"><button class="ghost rename">改名</button><button class="ghost toggle">${i.active?'停用':'啟用'}</button><button class="danger delete">刪除</button></div></div>`}
+async function addManagedItem(kind){const isStock=kind==='stock',input=$(isStock?'newStockItemName':'newItemName'),name=input.value.trim(),all=await (isStock?allStockItems():allItems());if(!name)return;if(all.some(i=>i.name===name))return toast('已有相同品項');const rec={name,active:true,sort:(all.at(-1)?.sort||0)+1,createdAt:new Date().toISOString()},id=await add(isStock?'stockItems':'items',rec);if(!isStock)await put('mappings',{orderItemId:id,stockItemId:null,factor:1});input.value='';toast('品項已新增');await refreshAll()}
+async function renameManaged(kind,id){const st=kind==='stock'?'stockItems':'items',all=kind==='stock'?await allStockItems():await allItems(),item=await getOne(st,id),name=prompt('新的品項名稱：',item.name);if(name===null)return;const n=name.trim();if(!n)return;if(all.some(i=>i.id!==id&&i.name===n))return toast('已有相同品項');await put(st,{...item,name:n});toast('名稱已更新');await refreshAll()}
+async function toggleManaged(kind,id){const st=kind==='stock'?'stockItems':'items',i=await getOne(st,id);await put(st,{...i,active:!i.active});toast(i.active?'品項已停用':'品項已啟用');await refreshAll()}
+async function deleteManaged(kind,id){const isStock=kind==='stock',st=isStock?'stockItems':'items',i=await getOne(st,id);let used=false,msg='';if(isStock){const receipts=await getAll('receipts'),mappings=await getAll('mappings'),orders=await getAll('orders');used=receipts.some(r=>r.stockItemId===id)||mappings.some(m=>m.stockItemId===id)||orders.some(o=>(o.stockSnapshot||[]).some(s=>s.stockItemId===id));msg=used?`「${i.name}」已有進貨、扣庫設定或歷史訂單。建議停用；刪除後歷史紀錄可能顯示為已刪除品項。仍要刪除嗎？`:`確定刪除「${i.name}」？`}else{const orders=await getAll('orders');used=orders.some(o=>Number(o.quantities?.[id]||0)>0);msg=used?`「${i.name}」已有歷史訂單，建議停用。仍要刪除嗎？`:`確定刪除「${i.name}」？`}
+  if(!(await confirmAction('刪除品項',msg)))return;await del(st,id);if(!isStock)await del('mappings',id);toast('品項已刪除');await refreshAll()}
+async function moveManaged(kind,id,dir){const st=kind==='stock'?'stockItems':'items',items=kind==='stock'?await allStockItems():await allItems(),idx=items.findIndex(i=>i.id===id),j=idx+dir;if(idx<0||j<0||j>=items.length)return;const a=items[idx],b=items[j],t=a.sort;a.sort=b.sort;b.sort=t;await put(st,a);await put(st,b);await refreshAll()}
 
-async function editOrder(id) {
-  const o = await reqP(store('orders').get(id));
-  if (!o) return;
-  switchView('newOrder');
-  $('editingOrderId').value=o.id;
-  $('customerName').value=o.customerName;
-  $('customerPhone').value=o.customerPhone || '';
-  $('pickupDate').value=o.pickupDate;
-  $('orderNote').value=o.note || '';
-  $('orderFormTitle').textContent='編輯訂單';
-  $('cancelEditBtn').classList.remove('hidden');
-  await renderQtyList(o.quantities || {});
-  window.scrollTo({top:0,behavior:'smooth'});
-}
+async function renderMappings(){const orderItems=await allItems(),stocks=await allStockItems(),maps=Object.fromEntries((await getAll('mappings')).map(m=>[m.orderItemId,m]));$('mappingList').innerHTML=orderItems.map(oi=>{const m=maps[oi.id]||{stockItemId:null,factor:1};return`<div class="mapping-row" data-id="${oi.id}"><div class="mapping-name">${esc(oi.name)}</div><select class="map-stock"><option value="">不扣庫存</option>${stocks.map(s=>`<option value="${s.id}" ${Number(m.stockItemId)===s.id?'selected':''}>${esc(s.name)}${s.active?'':'（停用）'}</option>`).join('')}</select><input class="map-factor" type="number" min="0.01" step="0.01" value="${Number(m.factor||1)}"><button class="primary save-map">儲存</button></div>`}).join('')}
+async function saveMapping(row){const orderItemId=Number(row.dataset.id),stockItemId=Number(row.querySelector('.map-stock').value||0)||null,factor=Number(row.querySelector('.map-factor').value||1);if(stockItemId&&!(factor>0))return toast('扣庫倍率必須大於 0');await put('mappings',{orderItemId,stockItemId,factor:factor>0?factor:1});toast('扣庫設定已儲存')}
 
-function confirmAction(title, message) {
-  return new Promise(resolve => {
-    const d = $('confirmDialog');
-    $('confirmTitle').textContent=title;
-    $('confirmMessage').textContent=message;
-    d.returnValue='';
-    d.addEventListener('close',()=>resolve(d.returnValue==='ok'),{once:true});
-    d.showModal();
-  });
-}
+function xmlEscape(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function xlsCell(v,type='String',style=''){return`<Cell${style?` ss:StyleID="${style}"`:''}><Data ss:Type="${type}">${xmlEscape(v)}</Data></Cell>`}
+function downloadBlob(blob,filename){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},800)}
+async function exportExcel(){const date=$('statsDate').value;if(!date)return toast('請先選擇取貨日期');const {items,orders,totals}=await getStats(date);if(!orders.length)return toast('此日期沒有訂單');const used=items.filter(i=>orders.some(o=>Number(o.quantities?.[i.id]||0)>0));const detailHeader=['取貨日期','訂購人姓名','電話','備註',...used.map(i=>i.name)],detailRows=orders.map(o=>[fmtDate(o.pickupDate),o.customerName,o.customerPhone||'',o.note||'',...used.map(i=>Number(o.quantities?.[i.id]||0))]),totalRows=used.map(i=>[i.name,Number(totals[i.id]||0)]),rowXml=row=>`<Row>${row.map(v=>xlsCell(v,typeof v==='number'?'Number':'String')).join('')}</Row>`,xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default"><Font ss:FontName="Microsoft JhengHei" ss:Size="11"/></Style><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#EADFD5" ss:Pattern="Solid"/></Style></Styles><Worksheet ss:Name="訂單明細"><Table><Row>${detailHeader.map(h=>xlsCell(h,'String','h')).join('')}</Row>${detailRows.map(rowXml).join('')}</Table></Worksheet><Worksheet ss:Name="品項總計"><Table><Row>${['品項','總數量'].map(h=>xlsCell(h,'String','h')).join('')}</Row>${totalRows.map(rowXml).join('')}</Table></Worksheet></Workbook>`;downloadBlob(new Blob(['\ufeff',xml],{type:'application/vnd.ms-excel;charset=utf-8'}),`${date.replaceAll('-','')}_陳家糖燻滷味訂單.xls`);toast('Excel 已匯出')}
 
-async function deleteOrder(id) {
-  const o = await reqP(store('orders').get(id));
-  if (!o) return;
-  if (!(await confirmAction('刪除訂單', `確定刪除「${o.customerName}」${fmtDate(o.pickupDate)} 的訂單？`))) return;
-  await del('orders',id);
-  toast('訂單已刪除');
-  await refreshAll();
-}
+async function exportBackup(){const payload={app:'陳家糖燻滷味',version:2,exportedAt:new Date().toISOString(),items:await getAll('items'),orders:await getAll('orders'),stockItems:await getAll('stockItems'),receipts:await getAll('receipts'),mappings:await getAll('mappings')};downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'}),`陳家糖燻滷味_V2_備份_${todayISO().replaceAll('-','')}.json`);toast('備份已匯出')}
+async function importBackup(file){try{const data=JSON.parse(await file.text());if(!Array.isArray(data.items)||!Array.isArray(data.orders))throw new Error('格式');if(!(await confirmAction('匯入備份','將以備份內容取代目前資料，確定繼續？')))return;for(const name of ['items','orders','stockItems','receipts','mappings']){if(!db.objectStoreNames.contains(name))continue;const tx=db.transaction(name,'readwrite'),s=tx.objectStore(name);s.clear();for(const v of (data[name]||[]))s.put(v);await txDone(tx)}await ensureDefaults();toast('備份已還原');await refreshAll()}catch(e){console.error(e);toast('備份檔無法讀取')}}
+async function renderBackupInfo(){const [items,orders,stocks,receipts]=await Promise.all([getAll('items'),getAll('orders'),getAll('stockItems'),getAll('receipts')]);$('backupInfo').innerHTML=`目前資料：<strong>${items.length}</strong> 個訂單品項、<strong>${orders.length}</strong> 筆訂單、<strong>${stocks.length}</strong> 個庫存品項、<strong>${receipts.length}</strong> 筆進貨。`}
 
-async function renderOrders() {
-  const items = await allItems();
-  const names = Object.fromEntries(items.map(i=>[i.id,i.name]));
-  const date = $('orderFilterDate').value;
-  const q = $('orderSearch').value.trim().toLowerCase();
-  let orders = await getAll('orders');
-  orders = orders.filter(o => (!date || o.pickupDate===date) && (!q || (o.customerName||'').toLowerCase().includes(q) || (o.customerPhone||'').toLowerCase().includes(q)));
-  orders.sort((a,b)=>b.pickupDate.localeCompare(a.pickupDate) || (b.id-a.id));
-  $('orderList').innerHTML = orders.length ? orders.map(o => {
-    const chips = Object.entries(o.quantities||{}).filter(([,qty])=>qty>0).map(([id,qty])=>`<span class="chip">${esc(names[id]||'已刪除品項')} × ${qty}</span>`).join('');
-    return `<article class="order-card">
-      <div class="order-card-head"><div><h3>${esc(o.customerName)}</h3><div class="meta">${fmtDate(o.pickupDate)}${o.customerPhone ? ' ・ '+esc(o.customerPhone):''}</div></div></div>
-      <div class="chips">${chips}</div>
-      ${o.note ? `<div class="note">備註：${esc(o.note)}</div>`:''}
-      <div class="card-actions"><button class="ghost edit-order" data-id="${o.id}" type="button">修改</button><button class="danger delete-order" data-id="${o.id}" type="button">刪除</button></div>
-    </article>`;
-  }).join('') : '<div class="empty">沒有符合條件的訂單</div>';
-}
+async function refreshAll(){await fillStockSelects();await Promise.all([renderOrders(),renderStats(),renderReceipts(),renderStock(),renderMovements(),renderItemManagement(),renderStockItemManagement(),renderMappings(),renderBackupInfo()]);if(!$('editingOrderId').value)await renderQtyList()}
+function switchView(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===id));({orders:renderOrders,stats:renderStats,receipts:renderReceipts,stock:renderStock,movements:renderMovements,items:renderItemManagement,stockItems:renderStockItemManagement,mappings:renderMappings,backup:renderBackupInfo}[id]||(()=>{}))()}
 
-async function getStats(date) {
-  const items = await allItems();
-  const orders = (await getAll('orders')).filter(o=>o.pickupDate===date).sort((a,b)=>a.id-b.id);
-  const totals = {};
-  let totalQty = 0;
-  orders.forEach(o=>Object.entries(o.quantities||{}).forEach(([id,qty])=>{totals[id]=(totals[id]||0)+Number(qty); totalQty += Number(qty);}));
-  return {items,orders,totals,totalQty};
-}
+function bindEvents(){document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(b)switchView(b.dataset.view)});$('orderForm').addEventListener('submit',saveOrder);$('cancelEditBtn').addEventListener('click',resetOrderForm);$('clearQtyBtn').addEventListener('click',()=>document.querySelectorAll('.qty-input').forEach(i=>i.value=0));$('itemQuantityList').addEventListener('click',e=>{const row=e.target.closest('.qty-row');if(!row)return;const inp=row.querySelector('.qty-input');let v=Math.max(0,parseInt(inp.value||0,10)||0);if(e.target.closest('.qty-plus'))inp.value=v+1;if(e.target.closest('.qty-minus'))inp.value=Math.max(0,v-1)});
+$('orderFilterDate').addEventListener('change',renderOrders);$('orderSearch').addEventListener('input',renderOrders);$('todayOrdersBtn').addEventListener('click',()=>{$('orderFilterDate').value=todayISO();renderOrders()});$('clearOrderFilterBtn').addEventListener('click',()=>{$('orderFilterDate').value='';$('orderSearch').value='';renderOrders()});$('orderList').addEventListener('click',e=>{const a=e.target.closest('.edit-order'),b=e.target.closest('.delete-order');if(a)editOrder(Number(a.dataset.id));if(b)deleteOrder(Number(b.dataset.id))});
+$('statsDate').addEventListener('change',renderStats);$('exportExcelBtn').addEventListener('click',exportExcel);
+$('receiptForm').addEventListener('submit',saveReceipt);$('cancelReceiptEditBtn').addEventListener('click',resetReceiptForm);$('receiptList').addEventListener('click',e=>{const a=e.target.closest('.edit-receipt'),b=e.target.closest('.delete-receipt');if(a)editReceipt(Number(a.dataset.id));if(b)deleteReceipt(Number(b.dataset.id))});
+$('movementItemFilter').addEventListener('change',renderMovements);$('movementSearch').addEventListener('input',renderMovements);
+$('addItemForm').addEventListener('submit',e=>{e.preventDefault();addManagedItem('item')});$('addStockItemForm').addEventListener('submit',e=>{e.preventDefault();addManagedItem('stock')});for(const id of ['itemManageList','stockItemManageList'])$(id).addEventListener('click',e=>{const row=e.target.closest('.manage-row');if(!row)return;const kind=row.dataset.type,idn=Number(row.dataset.id);if(e.target.closest('.rename'))renameManaged(kind,idn);if(e.target.closest('.toggle'))toggleManaged(kind,idn);if(e.target.closest('.delete'))deleteManaged(kind,idn);if(e.target.closest('.move-up'))moveManaged(kind,idn,-1);if(e.target.closest('.move-down'))moveManaged(kind,idn,1)});
+$('mappingList').addEventListener('click',e=>{const b=e.target.closest('.save-map');if(b)saveMapping(b.closest('.mapping-row'))});$('exportBackupBtn').addEventListener('click',exportBackup);$('importBackupInput').addEventListener('change',e=>{const f=e.target.files[0];if(f)importBackup(f);e.target.value=''});
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;$('installBtn').classList.remove('hidden')});$('installBtn').addEventListener('click',async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('installBtn').classList.add('hidden')})}
 
-async function renderStats() {
-  const date = $('statsDate').value || todayISO();
-  const {items,orders,totals,totalQty} = await getStats(date);
-  const names = Object.fromEntries(items.map(i=>[i.id,i.name]));
-  $('statsSummary').innerHTML = `
-    <div class="summary-box">訂單筆數<strong>${orders.length}</strong></div>
-    <div class="summary-box">品項總件數<strong>${totalQty}</strong></div>`;
-  const rows = items.filter(i=>totals[i.id]>0).sort((a,b)=>a.sort-b.sort).map(i=>`<tr><td>${esc(i.name)}</td><td class="num"><strong>${totals[i.id]}</strong></td></tr>`).join('');
-  $('itemTotalsBody').innerHTML = rows || '<tr><td colspan="2" class="empty">此日期尚無訂單</td></tr>';
-  $('customerStatsList').innerHTML = orders.length ? orders.map(o=>{
-    const chips = Object.entries(o.quantities||{}).filter(([,q])=>q>0).map(([id,q])=>`<span class="chip">${esc(names[id]||'已刪除品項')} × ${q}</span>`).join('');
-    return `<div class="customer-stat"><h4>${esc(o.customerName)}</h4><div class="meta">${esc(o.customerPhone||'未填電話')}</div><div class="chips">${chips}</div>${o.note?`<div class="note">備註：${esc(o.note)}</div>`:''}</div>`;
-  }).join('') : '<div class="empty">此日期尚無訂單</div>';
-}
-
-async function renderItemManagement() {
-  const items = await allItems();
-  $('itemManageList').innerHTML = items.map((i,idx)=>`<div class="manage-row" data-id="${i.id}">
-    <div class="manage-order"><button class="ghost item-up" type="button" ${idx===0?'disabled':''}>▲</button><button class="ghost item-down" type="button" ${idx===items.length-1?'disabled':''}>▼</button></div>
-    <div class="manage-name ${i.active?'':'disabled'}">${esc(i.name)}</div>
-    <div class="manage-actions"><button class="ghost rename-item" type="button">改名</button><button class="ghost toggle-item" type="button">${i.active?'停用':'啟用'}</button><button class="danger delete-item" type="button">刪除</button></div>
-  </div>`).join('');
-}
-
-async function addItem(e) {
-  e.preventDefault();
-  const name = $('newItemName').value.trim();
-  if (!name) return;
-  const items = await allItems();
-  if (items.some(i=>i.name===name)) return toast('已有相同品項');
-  await add('items',{name,active:true,sort:(items.at(-1)?.sort || 0)+1,createdAt:new Date().toISOString()});
-  $('newItemName').value='';
-  toast('品項已新增');
-  await refreshAll();
-}
-
-async function renameItem(id) {
-  const item = await reqP(store('items').get(id));
-  const name = prompt('新的品項名稱：',item.name);
-  if (name===null) return;
-  const n=name.trim(); if(!n) return;
-  const all=await allItems(); if(all.some(i=>i.id!==id && i.name===n)) return toast('已有相同品項');
-  await put('items',{...item,name:n}); toast('品項名稱已更新'); await refreshAll();
-}
-async function toggleItem(id) { const i=await reqP(store('items').get(id)); await put('items',{...i,active:!i.active}); toast(i.active?'品項已停用':'品項已啟用'); await refreshAll(); }
-async function deleteItem(id) {
-  const i=await reqP(store('items').get(id));
-  const orders=await getAll('orders');
-  const used=orders.some(o=>Number(o.quantities?.[id]||0)>0);
-  const msg=used ? `「${i.name}」已有歷史訂單。刪除後舊訂單仍保留數量，但品項名稱會顯示為「已刪除品項」。建議改用停用。仍要刪除嗎？` : `確定刪除「${i.name}」？`;
-  if(!(await confirmAction('刪除品項',msg))) return;
-  await del('items',id); toast('品項已刪除'); await refreshAll();
-}
-async function moveItem(id,dir) {
-  const items=await allItems(); const idx=items.findIndex(i=>i.id===id); const j=idx+dir; if(idx<0||j<0||j>=items.length)return;
-  const a=items[idx], b=items[j]; const temp=a.sort; a.sort=b.sort; b.sort=temp; await put('items',a); await put('items',b); await refreshAll();
-}
-
-function xmlEscape(s='') { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function xlsCell(value, type='String', style='') { return `<Cell${style?` ss:StyleID="${style}"`:''}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`; }
-function downloadBlob(blob, filename) { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500); }
-
-async function exportExcel() {
-  const date=$('statsDate').value; if(!date) return toast('請先選擇取貨日期');
-  const {items,orders,totals}=await getStats(date); if(!orders.length) return toast('此日期沒有訂單');
-  const activeIds = items.filter(i=>orders.some(o=>Number(o.quantities?.[i.id]||0)>0)).sort((a,b)=>a.sort-b.sort);
-  const detailHeader=['取貨日期','訂購人姓名','電話','備註',...activeIds.map(i=>i.name)];
-  const detailRows=orders.map(o=>[fmtDate(o.pickupDate),o.customerName,o.customerPhone||'',o.note||'',...activeIds.map(i=>Number(o.quantities?.[i.id]||0))]);
-  const totalRows=activeIds.map(i=>[i.name,Number(totals[i.id]||0)]);
-  const rowXml = row => `<Row>${row.map((v,idx)=>xlsCell(v, typeof v==='number'?'Number':'String', idx===0?'sText':'' )).join('')}</Row>`;
-  const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
-  <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Microsoft JhengHei" ss:Size="11"/></Style><Style ss:ID="sHeader"><Font ss:FontName="Microsoft JhengHei" ss:Bold="1"/><Interior ss:Color="#EADFD5" ss:Pattern="Solid"/></Style><Style ss:ID="sText"><NumberFormat ss:Format="@"/></Style></Styles>
-  <Worksheet ss:Name="訂單明細"><Table><Row>${detailHeader.map(h=>xlsCell(h,'String','sHeader')).join('')}</Row>${detailRows.map(rowXml).join('')}</Table></Worksheet>
-  <Worksheet ss:Name="品項總計"><Table><Row>${['品項','總數量'].map(h=>xlsCell(h,'String','sHeader')).join('')}</Row>${totalRows.map(rowXml).join('')}</Table></Worksheet>
-  </Workbook>`;
-  downloadBlob(new Blob(['\ufeff',xml],{type:'application/vnd.ms-excel;charset=utf-8'}),`${date.replaceAll('-','')}_陳家糖燻滷味訂單.xls`);
-  toast('Excel 已匯出');
-}
-
-async function exportBackup() {
-  const payload={app:'陳家糖燻滷味',version:1,exportedAt:new Date().toISOString(),items:await getAll('items'),orders:await getAll('orders')};
-  downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'}),`陳家糖燻滷味_備份_${todayISO().replaceAll('-','')}.json`);
-  toast('備份已匯出');
-}
-
-async function importBackup(file) {
-  try {
-    const data=JSON.parse(await file.text());
-    if(!Array.isArray(data.items)||!Array.isArray(data.orders)) throw new Error('格式錯誤');
-    if(!(await confirmAction('匯入備份',`將以備份內容取代目前資料：${data.items.length} 個品項、${data.orders.length} 筆訂單。確定繼續？`))) return;
-    for (const name of ['items','orders']) {
-      const tx=db.transaction(name,'readwrite'); const s=tx.objectStore(name); s.clear(); (data[name]||[]).forEach(v=>s.put(v));
-      await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
-    }
-    toast('備份已還原'); await refreshAll();
-  } catch(err) { console.error(err); toast('備份檔無法讀取'); }
-}
-
-async function renderBackupInfo() {
-  const [items,orders]=await Promise.all([getAll('items'),getAll('orders')]);
-  $('backupInfo').innerHTML=`目前資料：<strong>${items.length}</strong> 個品項、<strong>${orders.length}</strong> 筆訂單。`;
-}
-
-function switchView(id) {
-  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===id));
-  if(id==='orders') renderOrders(); if(id==='stats') renderStats(); if(id==='items') renderItemManagement(); if(id==='backup') renderBackupInfo();
-}
-
-async function refreshAll() {
-  await Promise.all([renderOrders(),renderStats(),renderItemManagement(),renderBackupInfo()]);
-  if(!$('editingOrderId').value) await renderQtyList();
-}
-
-function bindEvents() {
-  document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(b)switchView(b.dataset.view);});
-  $('orderForm').addEventListener('submit',saveOrder);
-  $('cancelEditBtn').addEventListener('click',resetOrderForm);
-  $('clearQtyBtn').addEventListener('click',()=>document.querySelectorAll('.qty-input').forEach(i=>i.value=0));
-  $('itemQuantityList').addEventListener('click',e=>{const row=e.target.closest('.qty-row');if(!row)return;const inp=row.querySelector('.qty-input');let v=Math.max(0,parseInt(inp.value||0,10)||0);if(e.target.closest('.qty-plus'))inp.value=v+1;if(e.target.closest('.qty-minus'))inp.value=Math.max(0,v-1);});
-  $('orderFilterDate').addEventListener('change',renderOrders); $('orderSearch').addEventListener('input',renderOrders);
-  $('todayOrdersBtn').addEventListener('click',()=>{$('orderFilterDate').value=todayISO();renderOrders();});
-  $('clearOrderFilterBtn').addEventListener('click',()=>{$('orderFilterDate').value='';$('orderSearch').value='';renderOrders();});
-  $('orderList').addEventListener('click',e=>{const ed=e.target.closest('.edit-order');const de=e.target.closest('.delete-order');if(ed)editOrder(Number(ed.dataset.id));if(de)deleteOrder(Number(de.dataset.id));});
-  $('statsDate').addEventListener('change',renderStats); $('exportExcelBtn').addEventListener('click',exportExcel);
-  $('addItemForm').addEventListener('submit',addItem);
-  $('itemManageList').addEventListener('click',e=>{const row=e.target.closest('.manage-row');if(!row)return;const id=Number(row.dataset.id);if(e.target.closest('.rename-item'))renameItem(id);if(e.target.closest('.toggle-item'))toggleItem(id);if(e.target.closest('.delete-item'))deleteItem(id);if(e.target.closest('.item-up'))moveItem(id,-1);if(e.target.closest('.item-down'))moveItem(id,1);});
-  $('exportBackupBtn').addEventListener('click',exportBackup); $('importBackupInput').addEventListener('change',e=>{const f=e.target.files[0];if(f)importBackup(f);e.target.value='';});
-  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;$('installBtn').classList.remove('hidden');});
-  $('installBtn').addEventListener('click',async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('installBtn').classList.add('hidden');});
-}
-
-async function init() {
-  db=await openDB(); await ensureDefaults(); bindEvents(); $('pickupDate').value=todayISO(); $('statsDate').value=todayISO(); await refreshAll();
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
-}
-
-init().catch(err=>{console.error(err);document.body.innerHTML='<main><div class="card"><h2>系統初始化失敗</h2><p>請重新整理頁面，或確認瀏覽器允許網站儲存資料。</p></div></main>';});
+async function migrateOldOrders(){const orders=await getAll('orders');let changed=0;for(const o of orders){if(!Array.isArray(o.stockSnapshot)){o.stockSnapshot=await buildStockSnapshot(o.quantities||{});await put('orders',o);changed++}}if(changed)console.log(`Migrated ${changed} orders`)}
+async function init(){db=await openDB();await ensureDefaults();await migrateOldOrders();bindEvents();$('pickupDate').value=todayISO();$('statsDate').value=todayISO();$('receiptDate').value=todayISO();await refreshAll();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.error)}
+init().catch(err=>{console.error(err);document.body.innerHTML='<main><div class="card"><h2>系統初始化失敗</h2><p>請重新整理頁面，或確認瀏覽器允許網站儲存資料。</p></div></main>'});
