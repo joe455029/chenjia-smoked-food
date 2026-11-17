@@ -15,7 +15,7 @@
 </head>
 <body>
 <header class="app-header">
-  <div><h1>陳家糖燻滷味</h1><p>訂單・進出貨管理 V3.0</p></div>
+  <div><h1>陳家糖燻滷味</h1><p>訂單・進出貨管理 V3.1</p></div>
   <button id="installBtn" class="ghost small hidden" type="button">安裝 App</button>
 </header>
 <main>
@@ -24,6 +24,7 @@
     <button class="tab" data-view="orders">訂單管理</button>
     <button class="tab" data-view="stats">訂單統計</button>
     <button class="tab" data-view="inventory">進出貨管理</button>
+    <button class="tab" data-view="stockOverview">總庫存表</button>
     <button class="tab" data-view="items">訂單品項</button>
     <button class="tab" data-view="stockItems">庫存品項</button>
     <button class="tab" data-view="backup">備份還原</button>
@@ -76,6 +77,14 @@
     <div class="filters inventory-filters"><label>開始日期<input id="inventoryStartDate" type="date" /></label><label>結束日期<input id="inventoryEndDate" type="date" /></label><label>品項<select id="inventoryItemFilter"></select></label></div>
     <div id="inventorySummary" class="summary-grid"></div>
     <div class="table-wrap"><table><thead><tr><th>品項</th><th>日期</th><th class="num">進貨</th><th class="num">出貨</th><th class="num">剩餘</th><th>備註</th><th>操作</th></tr></thead><tbody id="inventoryBody"></tbody></table></div>
+  </div></section>
+
+
+  <section id="stockOverview" class="view"><div class="card">
+    <div class="section-title-row"><h2>總庫存表</h2><button id="refreshStockOverviewBtn" class="ghost small" type="button">重新整理</button></div>
+    <p class="hint">快速查看每個庫存品項目前的剩餘數量。資料取自「進出貨管理」該品項最新計算結果；本頁僅供查看，不會直接修改庫存。</p>
+    <div id="stockOverviewSummary" class="summary-grid"></div>
+    <div class="table-wrap"><table class="stock-overview-table"><thead><tr><th>品項</th><th class="num">目前庫存</th><th>最後更新</th></tr></thead><tbody id="stockOverviewBody"></tbody></table></div>
   </div></section>
 
   <section id="items" class="view"><div class="card"><h2>訂單品項管理</h2><form id="addItemForm" class="inline-form"><input id="newItemName" required placeholder="新增訂單品項名稱" /><button class="primary" type="submit">新增</button></form><p class="hint">這裡只控制訂單可選的品項，與進出貨品項互不影響。</p><div id="itemManageList" class="manage-list"></div></div></section>
