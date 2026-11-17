@@ -15,7 +15,7 @@
 </head>
 <body>
 <header class="app-header">
-  <div><h1>陳家糖燻滷味</h1><p>訂單・進貨・庫存管理 V2.4</p></div>
+  <div><h1>陳家糖燻滷味</h1><p>訂單・進出貨管理 V3.0</p></div>
   <button id="installBtn" class="ghost small hidden" type="button">安裝 App</button>
 </header>
 <main>
@@ -23,12 +23,9 @@
     <button class="tab active" data-view="newOrder">新增訂單</button>
     <button class="tab" data-view="orders">訂單管理</button>
     <button class="tab" data-view="stats">訂單統計</button>
-    <button class="tab" data-view="receipts">進貨管理</button>
-    <button class="tab" data-view="stock">庫存</button>
-    <button class="tab" data-view="movements">異動紀錄</button>
+    <button class="tab" data-view="inventory">進出貨管理</button>
     <button class="tab" data-view="items">訂單品項</button>
     <button class="tab" data-view="stockItems">庫存品項</button>
-    <button class="tab" data-view="mappings">扣庫設定</button>
     <button class="tab" data-view="backup">備份還原</button>
   </nav>
 
@@ -38,9 +35,9 @@
       <label>訂購人姓名<input id="customerName" required autocomplete="name" /></label>
       <label>訂購人電話<input id="customerPhone" inputmode="tel" autocomplete="tel" /></label>
       <label>取貨日期<input id="pickupDate" type="date" required /></label>
-      <div class="section-title-row items-heading"><h3>品項數量・切法</h3><button id="clearQtyBtn" class="ghost small" type="button">全部歸零</button></div>
+      <div class="section-title-row items-heading"><h3>品項數量・切法・備註</h3><button id="clearQtyBtn" class="ghost small" type="button">全部歸零</button></div>
       <div id="itemQuantityList" class="item-qty-list"></div>
-      <label>備註<textarea id="orderNote" rows="3" placeholder="例如：分兩袋、不要辣"></textarea></label>
+      <label>整張訂單備註<textarea id="orderNote" rows="3" placeholder="例如：分兩袋、下午來拿"></textarea></label>
       <button class="primary full" type="submit">儲存訂單</button>
     </form>
   </div></section>
@@ -48,6 +45,7 @@
   <section id="orders" class="view"><div class="card"><h2>訂單管理</h2>
     <div class="filters"><label>取貨日期<input id="orderFilterDate" type="date" /></label><label>搜尋姓名或電話<input id="orderSearch" type="search" /></label></div>
     <div class="actions-row"><button id="todayOrdersBtn" class="ghost" type="button">今天</button><button id="clearOrderFilterBtn" class="ghost" type="button">清除篩選</button></div>
+    <p class="hint">V3.0 起訂單與進出貨完全分開；刪除訂單不會影響進出貨紀錄或剩餘數量。</p>
     <div id="orderList" class="order-list"></div>
   </div></section>
 
@@ -58,27 +56,33 @@
     <h3>每位訂購人明細</h3><div id="customerStatsList" class="customer-stats-list"></div>
   </div></section>
 
-  <section id="receipts" class="view"><div class="card"><div class="section-title-row"><h2 id="receiptFormTitle">新增進貨</h2><button id="cancelReceiptEditBtn" class="ghost hidden" type="button">取消編輯</button></div>
-    <form id="receiptForm"><input id="editingReceiptId" type="hidden" />
-      <div class="filters"><label>日期<input id="receiptDate" type="date" required /></label><label>品項<select id="receiptStockItem" required></select></label></div>
-      <label>數量<input id="receiptQty" type="number" min="0.01" step="0.01" inputmode="decimal" required /></label>
-      <label>備註<textarea id="receiptNote" rows="2"></textarea></label>
-      <button class="primary full" type="submit">儲存進貨</button>
+  <section id="inventory" class="view"><div class="card">
+    <div class="section-title-row"><h2 id="inventoryFormTitle">進出貨管理</h2><button id="cancelInventoryEditBtn" class="ghost hidden" type="button">取消編輯</button></div>
+    <p class="hint">本頁與訂單完全脫鉤。每一筆可自行輸入進貨／出貨；「剩餘」會自動計算，也可直接手動覆寫。</p>
+    <form id="inventoryForm"><input id="editingInventoryId" type="hidden" />
+      <div class="table-wrap entry-table-wrap"><table class="entry-table"><thead><tr><th>品項</th><th>日期</th><th>進貨</th><th>出貨</th><th>剩餘</th><th>備註</th><th></th></tr></thead>
+      <tbody><tr>
+        <td><select id="inventoryStockItem" required></select></td>
+        <td><input id="inventoryDate" type="date" required /></td>
+        <td><input id="inventoryIn" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" /></td>
+        <td><input id="inventoryOut" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" /></td>
+        <td><div class="remaining-cell"><input id="inventoryRemaining" type="number" step="0.01" inputmode="decimal" placeholder="自動" /><button id="autoRemainingBtn" type="button" class="ghost tiny">自動</button></div></td>
+        <td><input id="inventoryNote" placeholder="備註" /></td>
+        <td><button class="primary save-entry" type="submit">儲存</button></td>
+      </tr></tbody></table></div>
     </form>
-    <h3>進貨紀錄</h3><div id="receiptList" class="order-list"></div>
+
+    <div class="section-title-row inventory-list-title"><h3>進出貨紀錄</h3><button id="clearInventoryFilterBtn" class="ghost small" type="button">清除篩選</button></div>
+    <div class="filters inventory-filters"><label>開始日期<input id="inventoryStartDate" type="date" /></label><label>結束日期<input id="inventoryEndDate" type="date" /></label><label>品項<select id="inventoryItemFilter"></select></label></div>
+    <div id="inventorySummary" class="summary-grid"></div>
+    <div class="table-wrap"><table><thead><tr><th>品項</th><th>日期</th><th class="num">進貨</th><th class="num">出貨</th><th class="num">剩餘</th><th>備註</th><th>操作</th></tr></thead><tbody id="inventoryBody"></tbody></table></div>
   </div></section>
 
-  <section id="stock" class="view"><div class="card"><h2>目前庫存</h2><p class="hint">庫存只計算「庫存計算起始日」之後的進貨與訂單；更早的歷史訂單不會回頭扣現在庫存。</p><div class="inline-form" style="margin-bottom:12px"><label style="min-width:180px">庫存計算起始日<input id="stockStartDate" type="date"></label><button id="saveStockStartBtn" class="primary" type="button">儲存起始日</button></div><div id="stockWarning"></div><div class="table-wrap"><table><thead><tr><th>品項</th><th class="num">目前庫存</th></tr></thead><tbody id="stockBody"></tbody></table></div></div></section>
+  <section id="items" class="view"><div class="card"><h2>訂單品項管理</h2><form id="addItemForm" class="inline-form"><input id="newItemName" required placeholder="新增訂單品項名稱" /><button class="primary" type="submit">新增</button></form><p class="hint">這裡只控制訂單可選的品項，與進出貨品項互不影響。</p><div id="itemManageList" class="manage-list"></div></div></section>
 
-  <section id="movements" class="view"><div class="card"><h2>庫存異動紀錄</h2><div class="filters"><label>品項<select id="movementItemFilter"></select></label><label>關鍵字<input id="movementSearch" type="search" placeholder="姓名、備註"></label></div><div id="movementList" class="movement-list"></div></div></section>
+  <section id="stockItems" class="view"><div class="card"><h2>庫存品項管理</h2><form id="addStockItemForm" class="inline-form"><input id="newStockItemName" required placeholder="新增庫存品項" /><button class="primary" type="submit">新增</button></form><p class="hint">這裡的品項會直接出現在「進出貨管理」的品項下拉選單。已有進出貨紀錄的品項建議停用，不要刪除。</p><div id="stockItemManageList" class="manage-list"></div></div></section>
 
-  <section id="items" class="view"><div class="card"><h2>訂單品項管理</h2><form id="addItemForm" class="inline-form"><input id="newItemName" required placeholder="新增品項名稱" /><button class="primary" type="submit">新增</button></form><p class="hint">已有歷史訂單的品項建議用「停用」而不是刪除。</p><div id="itemManageList" class="manage-list"></div></div></section>
-
-  <section id="stockItems" class="view"><div class="card"><h2>庫存品項管理</h2><form id="addStockItemForm" class="inline-form"><input id="newStockItemName" required placeholder="新增庫存品項" /><button class="primary" type="submit">新增</button></form><p class="hint">目前不設定單位。若已有進貨或扣庫設定，建議使用「停用」。</p><div id="stockItemManageList" class="manage-list"></div></div></section>
-
-  <section id="mappings" class="view"><div class="card"><h2>訂單扣庫設定</h2><p class="hint">設定每個訂單品項要扣哪一個庫存品項，以及每訂 1 份要扣多少。庫存會依目前的扣庫設定即時計算。</p><div id="mappingList" class="mapping-list"></div></div></section>
-
-  <section id="backup" class="view"><div class="card"><h2>資料備份與還原</h2><p>資料目前儲存在這台裝置的瀏覽器中，建議定期匯出。</p><div class="backup-actions"><button id="exportBackupBtn" class="primary" type="button">匯出完整備份</button><label class="file-button ghost">匯入備份<input id="importBackupInput" type="file" accept="application/json,.json" hidden /></label></div><div id="backupInfo" class="backup-info"></div></div></section>
+  <section id="backup" class="view"><div class="card"><h2>資料備份與還原</h2><p>資料目前儲存在這台裝置的瀏覽器中，建議定期匯出備份。</p><div class="backup-actions"><button id="exportBackupBtn" class="primary" type="button">匯出完整備份</button><label class="file-button ghost">匯入備份<input id="importBackupInput" type="file" accept="application/json,.json" hidden /></label></div><div id="backupInfo" class="backup-info"></div></div></section>
 </main>
 <div id="toast" class="toast"></div>
 <dialog id="confirmDialog"><form method="dialog"><h3 id="confirmTitle">確認</h3><p id="confirmMessage"></p><div class="dialog-actions"><button value="cancel" class="ghost">取消</button><button value="ok" class="danger">確定</button></div></form></dialog>

@@ -1,7 +1,7 @@
 {
   "name": "陳家糖燻滷味",
   "short_name": "陳家糖燻滷味",
-  "description": "陳家糖燻滷味訂單、進貨與庫存管理",
+  "description": "陳家糖燻滷味訂單與進出貨管理",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
